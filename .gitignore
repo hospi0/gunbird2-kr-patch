@@ -1,0 +1,9 @@
+*
+!.gitignore
+!README.md
+!tools/
+!tools/*.py
+!docs/
+!docs/*.md
+!data/
+!data/**
