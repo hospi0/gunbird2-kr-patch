@@ -82,6 +82,16 @@ def paint_box(P, T, s, R, C, lines_src, ko, tag):
     rows = used[:len(kl)] if len(kl) <= len(used) else list(range(used[0] if used else 0, (used[0] if used else 0) + len(kl)))
     if rows and rows[-1] >= R: rows = list(range(R - len(kl), R))
     img = [[0] * (C * 16) for _ in range(R * 16)]
+    fixed = [(r, t) for r, t in zip(rows, kl) if t.startswith('{')]   # «{열}구절{열}구절» = 구절마다 원문 시작 열에(따로 나타나는 스프라이트 — 2026-10-30 잘림)
+    for r, t in fixed:
+        segs = [(int(a), b) for a, b in (p.split('}', 1) for p in t[1:].split('{'))]
+        for k, (col, txt) in enumerate(segs):
+            pts, w = P.line(squeeze(txt)); lim = (segs[k + 1][0] if k + 1 < len(segs) else C) * 16
+            if col * 16 + w > lim: raise BuildError('%s 구절 폭 %dpx > %dpx «%s»' % (tag, w, lim - col * 16, txt))
+            for x, y in pts:
+                if 0 <= y < 16: img[r * 16 + y][col * 16 + x] = ROWCOL[y]
+    keep = [(r, t) for r, t in zip(rows, kl) if not t.startswith('{')]
+    rows, kl = [r for r, _ in keep], [t for _, t in keep]
     drawn = [(r, P.line(squeeze(text))) for r, text in zip(rows, kl)]
     inds = [len(lines_src[r]) - len(lines_src[r].lstrip('　')) if lines_src[r].strip('　') else lead for r, _ in drawn]
     if not all(w <= (C - i) * 16 for (_, (_, w)), i in zip(drawn, inds)):   # 한 줄이라도 원래 들여쓰기에 안 들어가면
