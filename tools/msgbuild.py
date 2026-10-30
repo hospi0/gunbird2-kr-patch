@@ -112,6 +112,37 @@ def paint_box(P, T, s, R, C, lines_src, ko, tag):
             T[g] = t
 
 
+BIG = [('STG7.015', 1584, 2, 13)]                       # 큰 글씨(글자 하나 = 2×2칸) «容赦しないよ‼» — 번역 work/text/ko_misc.tsv
+BIGTTF = r'C:\claude\utils\font\nanum-gothic\NanumGothicExtraBold.ttf'
+
+
+def misc_ko(where):
+    for r in csv.DictReader(open(os.path.join(ROOT, 'work', 'text', 'ko_misc.tsv'), encoding='utf-8'), delimiter='\t'):
+        if r['where'] == where and r['KO'].strip(): return r['KO'].strip()
+    raise BuildError('번역 없음 ' + where)
+
+
+def paint_big(T, s, R, C, text):
+    """흰 글씨(가장자리 = ARGB4444 알파 단계) 를 R×C 칸 창에 가운데로 — 칸 배치는 대사와 같음(열 단위, 열 안 아래 줄부터)"""
+    from PIL import Image, ImageDraw, ImageFont
+    S = 4; W, H = C * 16, R * 16
+    text = text.replace('‼', '!!')
+    F = ImageFont.truetype(BIGTTF, 100); b = F.getbbox('한')
+    F = ImageFont.truetype(BIGTTF, int(100 * (H - 6) * S / (b[3] - b[1])))
+    b = F.getbbox('한'); tb = F.getbbox(text)
+    im = Image.new('L', (W * S, H * S), 0)
+    if tb[2] - tb[0] > (W - 4) * S: raise BuildError('큰 글씨 폭 초과 %s «%s»' % (s, text))
+    ImageDraw.Draw(im).text(((W * S - (tb[2] - tb[0])) // 2 - tb[0], 3 * S - b[1]), text, font=F, fill=255)
+    cov = im.resize((W, H), Image.BOX).load()
+    for c in range(C):
+        for r in range(R):
+            t = T[s + c * R + (R - 1 - r)]
+            for y in range(16):
+                for x in range(16):
+                    a = cov[c * 16 + x, r * 16 + y] * 15 // 255
+                    t[msgtile.addr(x, y)] = (a << 12 | 0xFFF) if a else 0
+
+
 def build(preview=False):
     sys.stdout.reconfigure(encoding='utf-8')
     P = Painter(); ko = load_ko(); lay = msgsheet.layout()
@@ -135,6 +166,10 @@ def build(preview=False):
             try:
                 paint_box(P, T, s + c0 * R, R, c1 - c0, src, ko[key], '%s %d.%d' % (nm, k, b)); nbox += 1
             except BuildError as e: errs.append(str(e))
+    for f, a, R, C in BIG:
+        T = files[f][2]
+        try: paint_big(T, a, R, C, misc_ko('%s@%d' % (f, a)))
+        except BuildError as e: errs.append(str(e))
     if errs:
         print('\n'.join(errs)); raise SystemExit('빌드 에러 %d' % len(errs))
     out = os.path.join(ROOT, 'work', 'build'); os.makedirs(out, exist_ok=True)
