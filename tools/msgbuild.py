@@ -44,6 +44,8 @@ def load_ko():
     ko = {}
     for f in sorted(glob.glob(os.path.join(ROOT, 'work', 'text', 'ko_0*.tsv'))):
         for r in csv.DictReader(open(f, encoding='utf-8'), delimiter='\t'): ko[src[r['번호']]] = r['KO']
+    for r in csv.DictReader(open(os.path.join(ROOT, 'work', 'text', 'ko_extra.tsv'), encoding='utf-8'), delimiter='\t'):
+        ko[r['JP']] = r['KO']                             # 나중에 찾은 창(원문으로 찾음 — gb2 표 번호를 밀지 않게)
     return ko
 
 
@@ -80,12 +82,14 @@ def paint_box(P, T, s, R, C, lines_src, ko, tag):
     rows = used[:len(kl)] if len(kl) <= len(used) else list(range(used[0] if used else 0, (used[0] if used else 0) + len(kl)))
     if rows and rows[-1] >= R: rows = list(range(R - len(kl), R))
     img = [[0] * (C * 16) for _ in range(R * 16)]
-    for r, text in zip(rows, kl):
-        text = squeeze(text)
-        pts, w = P.line(text)
-        ind = len(lines_src[r]) - len(lines_src[r].lstrip('　')) if lines_src[r].strip('　') else lead
-        x0 = next((i * 16 for i in (ind, lead, 0) if w <= (C - i) * 16), 0)   # 원문 그 줄 들여쓰기 → 창 공통 → 0
-        if x0 + w > C * 16: raise BuildError('%s 폭 %dpx > %dpx «%s»' % (tag, w, C * 16, text))
+    drawn = [(r, P.line(squeeze(text))) for r, text in zip(rows, kl)]
+    inds = [len(lines_src[r]) - len(lines_src[r].lstrip('　')) if lines_src[r].strip('　') else lead for r, _ in drawn]
+    if not all(w <= (C - i) * 16 for (_, (_, w)), i in zip(drawn, inds)):   # 한 줄이라도 원래 들여쓰기에 안 들어가면
+        common = next((i for i in (lead, 0) if all(w <= (C - i) * 16 for _, (_, w) in drawn)), 0)
+        inds = [common] * len(drawn)                     # 창 전체 같은 시작 위치(첫 줄에 맞춤 — 하스피 2026-10-30 게임오버 힌트)
+    for (r, (pts, w)), ind in zip(drawn, inds):
+        x0 = ind * 16
+        if x0 + w > C * 16: raise BuildError('%s 폭 %dpx > %dpx «%s»' % (tag, w, C * 16, kl[rows.index(r)]))
         for x, y in pts:
             if 0 <= y < 16 and 0 <= x0 + x < C * 16: img[r * 16 + y][x0 + x] = ROWCOL[y]
     for c in range(C):
